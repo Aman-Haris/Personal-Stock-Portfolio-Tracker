@@ -171,6 +171,29 @@ def apply_custom_styles():
 
 apply_custom_styles()
 
+def make_dataframe_arrow_compatible(df):
+    """Convert DataFrame columns to Arrow-compatible types"""
+    df = df.copy()
+    
+    # Convert object columns to string
+    for col in df.select_dtypes(include=['object']).columns:
+        df[col] = df[col].astype(str)
+    
+    # Convert numeric columns with NaN to float
+    for col in df.select_dtypes(include=[np.number]).columns:
+        if df[col].isna().any():
+            df[col] = df[col].astype(float)
+    
+    # Convert boolean columns
+    for col in df.select_dtypes(include=['bool']).columns:
+        df[col] = df[col].astype(bool)
+    
+    # Convert datetime columns
+    for col in df.select_dtypes(include=['datetime64']).columns:
+        df[col] = pd.to_datetime(df[col])
+    
+    return df
+
 # Create tabs
 tab1, tab2 = st.tabs(["📈 Open Positions", "📉 Closed Positions"])
 
@@ -244,6 +267,9 @@ with tab1:
     for col in ['Growth(%)']:
         if col in display_open.columns:
             display_open[col] = display_open[col].apply(lambda x: safe_format(x, '{:.2f}%'))
+            
+    # Make dataframe Arrow-compatible
+    display_open = make_dataframe_arrow_compatible(display_open)
     
     st.dataframe(
         display_open.style
@@ -326,6 +352,9 @@ with tab2:
     for col in ['Growth(%)']:
         if col in display_closed.columns:
             display_closed[col] = display_closed[col].apply(lambda x: safe_format(x, '{:.2f}%'))
+            
+    # Make dataframe Arrow-compatible
+    display_closed = make_dataframe_arrow_compatible(display_closed)
     
     st.dataframe(
         display_closed.style
