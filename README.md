@@ -83,8 +83,8 @@ personal-stock-tracker/
   - Generate a JSON key file for this account
 
 - Share Your Google Sheet:
- - Open your Google Sheet
- - Click "Share" and add your service account email (found in the JSON key file) as an editor
+  - Open your Google Sheet
+  - Click "Share" and add your service account email (found in the JSON key file) as an editor
 
 ### 4. Configure Streamlit Secrets
 
