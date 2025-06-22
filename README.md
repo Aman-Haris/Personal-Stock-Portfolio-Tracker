@@ -72,22 +72,44 @@ personal-stock-tracker/
 
 ### 3. Configure Google Sheets
 
-Create a `.streamlit/secrets.toml` file with your Google Service Account:
+* Enable Google Sheets API:
+
+- Go to Google Cloud Console
+- Create a new project or select an existing one
+- Enable the "Google Sheets API" and "Google Drive API"
+
+* Create Service Account:
+  
+- In Google Cloud Console, go to "IAM & Admin" > "Service Accounts"
+- Create a new service account
+- Generate a JSON key file for this account
+
+* Share Your Google Sheet:
+
+- Open your Google Sheet
+- Click "Share" and add your service account email (found in the JSON key file) as an editor
+
+### 4. Configure Streamlit Secrets
+
+Create a `.streamlit/secrets.toml` file in your project directory with:
 
 ```toml
 [gcp_service_account]
 type = "service_account"
-project_id = "your_project_id"
-private_key_id = "..."
-private_key = "-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----\n"
-client_email = "..."
-client_id = "..."
-...
+project_id = "your-project-id"
+private_key_id = "your-private-key-id"
+private_key = "-----BEGIN PRIVATE KEY-----\nyour-private-key\n-----END PRIVATE KEY-----\n"
+client_email = "your-service-account-email@your-project-id.iam.gserviceaccount.com"
+client_id = "your-client-id"
+auth_uri = "https://accounts.google.com/o/oauth2/auth"
+token_uri = "https://oauth2.googleapis.com/token"
+auth_provider_x509_cert_url = "https://www.googleapis.com/oauth2/v1/certs"
+client_x509_cert_url = "https://www.googleapis.com/robot/v1/metadata/x509/your-service-account-email%40your-project-id.iam.gserviceaccount.com"
 ```
 
 Make sure your service account has access to the Google Sheet titled `"My Stock Portfolio"`.
 
-### 4. Run the app
+### 5. Run the app
 
   ```
   streamlit run dashboard.py
