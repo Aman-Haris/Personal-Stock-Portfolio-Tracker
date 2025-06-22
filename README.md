@@ -74,20 +74,20 @@ personal-stock-tracker/
 
 * Enable Google Sheets API:
 
-- Go to Google Cloud Console
-- Create a new project or select an existing one
-- Enable the "Google Sheets API" and "Google Drive API"
+i. Go to Google Cloud Console
+ii. Create a new project or select an existing one
+iii. Enable the "Google Sheets API" and "Google Drive API"
 
 * Create Service Account:
   
-- In Google Cloud Console, go to "IAM & Admin" > "Service Accounts"
-- Create a new service account
-- Generate a JSON key file for this account
+i. In Google Cloud Console, go to "IAM & Admin" > "Service Accounts"
+ii. Create a new service account
+iii. Generate a JSON key file for this account
 
 * Share Your Google Sheet:
 
-- Open your Google Sheet
-- Click "Share" and add your service account email (found in the JSON key file) as an editor
+i. Open your Google Sheet
+ii. Click "Share" and add your service account email (found in the JSON key file) as an editor
 
 ### 4. Configure Streamlit Secrets
 
