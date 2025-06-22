@@ -3,3 +3,5 @@ pandas
 plotly
 gspread
 google-auth
+streamlit-marquee
+streamlit-extras

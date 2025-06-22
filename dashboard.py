@@ -5,6 +5,49 @@ import gspread
 from google.oauth2.service_account import Credentials
 from datetime import datetime
 import numpy as np
+from streamlit.components.v1 import html
+
+# Marquee component
+def marquee(content):
+    return html(f"""
+    <div style="
+        width: 100%;
+        padding: 10px 0;
+        background-color: #f0f2f6;
+        border-radius: 5px;
+        overflow: hidden;
+        white-space: nowrap;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        margin-bottom: 20px;
+    ">
+        <marquee behavior="scroll" direction="left">
+            {content}
+        </marquee>
+    </div>
+    """, height=50)
+
+# Card component
+def metric_card(title, value, delta=None, delta_color="normal"):
+    color_map = {
+        "normal": "",
+        "inverse": "color: white; background-color: #4CAF50;" if (isinstance(delta, str) and ('%' in delta) and (float(delta.strip('%')))>= 0) else "color: white; background-color: #F44336;"
+    }
+    
+    delta_style = color_map.get(delta_color, "")
+    
+    return html(f"""
+    <div style="
+        padding: 15px;
+        border-radius: 10px;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        background-color: #f8f9fa;
+        margin: 10px;
+    ">
+        <div style="font-size: 14px; color: #555;">{title}</div>
+        <div style="font-size: 24px; font-weight: bold;">{value}</div>
+        {f'<div style="font-size: 14px; {delta_style}">{delta}</div>' if delta else ''}
+    </div>
+    """)
 
 # Set page config
 st.set_page_config(
@@ -67,7 +110,8 @@ def preprocess_data(open_df, closed_df):
     # Ensure numeric columns
     numeric_cols = ['Buying Price', 'No.of Shares bought', 'Investment Amount', 
                    'Current Share Price', 'Current Value', 'Profit/Loss', 'Growth(%)',
-                   'Selling Price', 'Selling Value', 'Profit/Loss Booked', 'Investment Days']
+                   'Selling Price', 'Selling Value', 'Profit/Loss Booked', 'Investment Days',
+                   'Possible Profit/Loss', "Today's Growth"]
     
     for col in numeric_cols:
         if col in open_df.columns:
@@ -92,7 +136,7 @@ def preprocess_data(open_df, closed_df):
             closed_df['Investment Days'] = (closed_df['Selling Date'] - closed_df['Buying Date']).dt.days
     
     # Fill NaN values for visualization
-    for col in ['Investment Days', 'Growth(%)']:
+    for col in ['Investment Days', 'Growth(%)', 'Possible Profit/Loss', "Today's Growth"]:
         if col in open_df.columns:
             open_df[col] = open_df[col].fillna(0)
         if col in closed_df.columns:
@@ -111,6 +155,21 @@ def safe_format(value, format_str):
     except (ValueError, TypeError):
         return str(value)
 
+# Make dataframe Arrow-compatible
+def make_dataframe_arrow_compatible(df):
+    df = df.copy()
+    
+    # Convert object columns to string
+    for col in df.select_dtypes(include=['object']).columns:
+        df[col] = df[col].astype(str)
+    
+    # Convert numeric columns with NaN to float
+    for col in df.select_dtypes(include=[np.number]).columns:
+        if df[col].isna().any():
+            df[col] = df[col].astype(float)
+    
+    return df
+
 # Load and preprocess data
 open_pos, closed_pos = load_data_from_gsheets()
 open_pos, closed_pos = preprocess_data(open_pos, closed_pos)
@@ -121,21 +180,24 @@ def calculate_metrics(open_df, closed_df):
     
     # Open positions metrics
     metrics['total_invested_open'] = open_df['Investment Amount'].sum()
-    metrics['total_current_open'] = open_df['Current Value'].sum()
     metrics['total_pl_open'] = open_df['Profit/Loss'].sum()
-    metrics['total_growth_open'] = ((metrics['total_current_open'] - metrics['total_invested_open']) / 
+    metrics['total_growth_open'] = ((metrics['total_pl_open']) / 
                                   metrics['total_invested_open'] * 100 if metrics['total_invested_open'] != 0 else 0)
+    metrics['total_days_open'] = open_df['Investment Days'].sum()
     
     # Closed positions metrics
     metrics['total_invested_closed'] = closed_df['Investment Amount'].sum()
     metrics['total_sold_closed'] = closed_df['Selling Value'].sum()
     metrics['total_pl_closed'] = closed_df['Profit/Loss Booked'].sum()
-    metrics['total_growth_closed'] = ((metrics['total_sold_closed'] - metrics['total_invested_closed']) / 
+    metrics['total_growth_closed'] = ((metrics['total_pl_closed']) / 
                                    metrics['total_invested_closed'] * 100 if metrics['total_invested_closed'] != 0 else 0)
+    metrics['total_possible_pl'] = closed_df['Possible Profit/Loss'].sum()
+    metrics['total_days_closed'] = closed_df['Investment Days'].sum()
     
     # Combined metrics
     metrics['total_invested_all'] = metrics['total_invested_open'] + metrics['total_invested_closed']
     metrics['total_pl_all'] = metrics['total_pl_open'] + metrics['total_pl_closed']
+    metrics['total_days_all'] = metrics['total_days_open'] + metrics['total_days_closed']
     
     return metrics
 
@@ -166,33 +228,14 @@ def apply_custom_styles():
     .stDataFrame {
         border-radius: 10px;
     }
+    .st-emotion-cache-1v0mbdj {
+        border-radius: 10px;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
     </style>
     """, unsafe_allow_html=True)
 
 apply_custom_styles()
-
-def make_dataframe_arrow_compatible(df):
-    """Convert DataFrame columns to Arrow-compatible types"""
-    df = df.copy()
-    
-    # Convert object columns to string
-    for col in df.select_dtypes(include=['object']).columns:
-        df[col] = df[col].astype(str)
-    
-    # Convert numeric columns with NaN to float
-    for col in df.select_dtypes(include=[np.number]).columns:
-        if df[col].isna().any():
-            df[col] = df[col].astype(float)
-    
-    # Convert boolean columns
-    for col in df.select_dtypes(include=['bool']).columns:
-        df[col] = df[col].astype(bool)
-    
-    # Convert datetime columns
-    for col in df.select_dtypes(include=['datetime64']).columns:
-        df[col] = pd.to_datetime(df[col])
-    
-    return df
 
 # Create tabs
 tab1, tab2 = st.tabs(["📈 Open Positions", "📉 Closed Positions"])
@@ -200,22 +243,56 @@ tab1, tab2 = st.tabs(["📈 Open Positions", "📉 Closed Positions"])
 with tab1:
     st.header("Open Positions Analysis")
     
-    # Summary cards
+    # Marquee with stock performance
+    marquee_content = " | ".join(
+        f"{row['Stock Name']}: {row.get('Today\'s Growth', 0)}%" 
+        for _, row in open_pos.iterrows()
+    )
+    marquee(marquee_content)
+    
+    # Summary cards row 1
     col1, col2, col3, col4 = st.columns(4)
     with col1:
         st.metric("Total Invested", f"₹{metrics['total_invested_open']:,.2f}")
     with col2:
-        st.metric("Current Value", f"₹{metrics['total_current_open']:,.2f}")
-    with col3:
         st.metric("Profit/Loss", f"₹{metrics['total_pl_open']:,.2f}", 
                  delta=f"{metrics['total_growth_open']:.2f}%")
+    with col3:
+        st.metric("Total Invested Days", f"{metrics['total_days_open']:,.0f}")
     with col4:
         avg_days = open_pos['Investment Days'].mean()
         st.metric("Avg Holding Days", f"{avg_days:.0f} days")
     
+    # Top Gainers/Losers cards
+    st.subheader("Performance Highlights")
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        st.markdown("**Top Gainers**")
+        top_gainers = open_pos.nlargest(3, 'Growth(%)')
+        for _, row in top_gainers.iterrows():
+            metric_card(
+                title=row['Stock Name'],
+                value=f"₹{row['Profit/Loss']:,.2f}",
+                delta=f"{row['Growth(%)']:.2f}%",
+                delta_color="inverse"
+            )
+    
+    with col2:
+        st.markdown("**Top Losers**")
+        top_losers = open_pos.nsmallest(3, 'Growth(%)')
+        for _, row in top_losers.iterrows():
+            metric_card(
+                title=row['Stock Name'],
+                value=f"₹{row['Profit/Loss']:,.2f}",
+                delta=f"{row['Growth(%)']:.2f}%",
+                delta_color="inverse"
+            )
+    
     # First row of charts
     col1, col2 = st.columns(2)
     with col1:
+        # Investment by Industry
         industry_investment = open_pos.groupby('Industry')['Investment Amount'].sum().reset_index()
         fig = px.pie(industry_investment, values='Investment Amount', names='Industry', 
                      title='Investment by Industry', hole=0.3)
@@ -223,32 +300,11 @@ with tab1:
         st.plotly_chart(fig, use_container_width=True)
     
     with col2:
+        # Investment by Cap Size
         cap_investment = open_pos.groupby('Cap Size')['Investment Amount'].sum().reset_index()
         fig = px.pie(cap_investment, values='Investment Amount', names='Cap Size', 
                      title='Investment by Market Cap Size', hole=0.3)
         fig.update_traces(textposition='inside', textinfo='percent+label')
-        st.plotly_chart(fig, use_container_width=True)
-    
-    # Second row of charts
-    col1, col2 = st.columns(2)
-    with col1:
-        top_losers = open_pos.sort_values('Growth(%)').head(3)
-        fig = px.bar(top_losers, x='Stock Name', y='Growth(%)', 
-                     title='Top Losers (Current Growth %)',
-                     color='Growth(%)', color_continuous_scale='RdYlGn',
-                     text='Growth(%)')
-        fig.update_traces(texttemplate='%{y:.2f}%', textposition='outside')
-        fig.update_layout(yaxis_title="Growth (%)")
-        st.plotly_chart(fig, use_container_width=True)
-    
-    with col2:
-        industry_perf = open_pos.groupby('Industry')['Growth(%)'].mean().reset_index()
-        fig = px.bar(industry_perf, x='Industry', y='Growth(%)', 
-                     title='Average Growth by Industry',
-                     color='Growth(%)', color_continuous_scale='RdYlGn',
-                     text='Growth(%)')
-        fig.update_traces(texttemplate='%{y:.2f}%', textposition='outside')
-        fig.update_layout(yaxis_title="Growth (%)")
         st.plotly_chart(fig, use_container_width=True)
     
     # Detailed table
@@ -256,18 +312,18 @@ with tab1:
     display_open = open_pos.copy()
     
     # Apply formatting
-    for col in ['Buying Price', 'Current Share Price', 'Today\'s Growth']:
+    for col in ['Buying Price', 'Current Share Price']:
         if col in display_open.columns:
             display_open[col] = display_open[col].apply(lambda x: safe_format(x, '{:.2f}'))
     
-    for col in ['Investment Amount', 'Current Value', 'Profit/Loss']:
+    for col in ['Investment Amount', 'Profit/Loss']:
         if col in display_open.columns:
             display_open[col] = display_open[col].apply(lambda x: safe_format(x, '₹{:,.2f}'))
     
     for col in ['Growth(%)']:
         if col in display_open.columns:
             display_open[col] = display_open[col].apply(lambda x: safe_format(x, '{:.2f}%'))
-            
+    
     # Make dataframe Arrow-compatible
     display_open = make_dataframe_arrow_compatible(display_open)
     
@@ -284,22 +340,55 @@ with tab1:
 with tab2:
     st.header("Closed Positions Analysis")
     
-    # Summary cards
+    # Marquee with stock performance
+    marquee_content = " | ".join(
+        f"{row['Stock Name']}: {row.get('Today\'s Growth', 0)}%" 
+        for _, row in closed_pos.iterrows()
+    )
+    marquee(marquee_content)
+    
+    # Summary cards row 1
     col1, col2, col3, col4 = st.columns(4)
     with col1:
         st.metric("Total Invested", f"₹{metrics['total_invested_closed']:,.2f}")
     with col2:
-        st.metric("Total Sold", f"₹{metrics['total_sold_closed']:,.2f}")
-    with col3:
         st.metric("Profit/Loss Booked", f"₹{metrics['total_pl_closed']:,.2f}", 
                  delta=f"{metrics['total_growth_closed']:.2f}%")
+    with col3:
+        st.metric("Possible P/L", f"₹{metrics['total_possible_pl']:,.2f}")
     with col4:
-        avg_days = closed_pos['Investment Days'].mean()
-        st.metric("Avg Holding Days", f"{avg_days:.0f} days")
+        st.metric("Total Invested Days", f"{metrics['total_days_closed']:,.0f}")
+    
+    # Top Gainers/Losers cards
+    st.subheader("Performance Highlights")
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        st.markdown("**Top Gainers**")
+        top_gainers = closed_pos.nlargest(3, 'Growth(%)')
+        for _, row in top_gainers.iterrows():
+            metric_card(
+                title=row['Stock Name'],
+                value=f"₹{row['Profit/Loss Booked']:,.2f}",
+                delta=f"{row['Growth(%)']:.2f}%",
+                delta_color="inverse"
+            )
+    
+    with col2:
+        st.markdown("**Top Losers**")
+        top_losers = closed_pos.nsmallest(3, 'Growth(%)')
+        for _, row in top_losers.iterrows():
+            metric_card(
+                title=row['Stock Name'],
+                value=f"₹{row['Profit/Loss Booked']:,.2f}",
+                delta=f"{row['Growth(%)']:.2f}%",
+                delta_color="inverse"
+            )
     
     # First row of charts
     col1, col2 = st.columns(2)
     with col1:
+        # Investment by Industry
         industry_investment = closed_pos.groupby('Industry')['Investment Amount'].sum().reset_index()
         fig = px.pie(industry_investment, values='Investment Amount', names='Industry', 
                      title='Investment by Industry (Closed Positions)', hole=0.3)
@@ -307,26 +396,7 @@ with tab2:
         st.plotly_chart(fig, use_container_width=True)
     
     with col2:
-        top_gainers = closed_pos.sort_values('Growth(%)', ascending=False).head(3)
-        fig = px.bar(top_gainers, x='Stock Name', y='Growth(%)', 
-                     title='Top Gainers (Closed Positions)',
-                     color='Growth(%)', color_continuous_scale='RdYlGn',
-                     text='Growth(%)')
-        fig.update_traces(texttemplate='%{y:.2f}%', textposition='outside')
-        fig.update_layout(yaxis_title="Growth (%)")
-        st.plotly_chart(fig, use_container_width=True)
-    
-    # Second row of charts
-    col1, col2 = st.columns(2)
-    with col1:
-        fig = px.histogram(closed_pos, x='Growth(%)', nbins=20,
-                          title='Distribution of Growth % (Closed Positions)',
-                          color_discrete_sequence=['#636EFA'])
-        fig.update_layout(xaxis_title="Growth (%)", yaxis_title="Count")
-        st.plotly_chart(fig, use_container_width=True)
-    
-    with col2:
-        # Ensure Investment Amount has no NaN values for size parameter
+        # Holding Period vs Growth
         closed_pos['Investment Amount Clean'] = closed_pos['Investment Amount'].fillna(0)
         fig = px.scatter(closed_pos, x='Investment Days', y='Growth(%)',
                         color='Cap Size', size='Investment Amount Clean',
@@ -341,18 +411,18 @@ with tab2:
     display_closed = closed_pos.copy()
     
     # Apply formatting
-    for col in ['Buying Price', 'Selling Price', 'Today\'s Growth']:
+    for col in ['Buying Price', 'Selling Price']:
         if col in display_closed.columns:
             display_closed[col] = display_closed[col].apply(lambda x: safe_format(x, '{:.2f}'))
     
-    for col in ['Investment Amount', 'Selling Value', 'Profit/Loss Booked']:
+    for col in ['Investment Amount', 'Selling Value', 'Profit/Loss Booked', 'Possible Profit/Loss']:
         if col in display_closed.columns:
             display_closed[col] = display_closed[col].apply(lambda x: safe_format(x, '₹{:,.2f}'))
     
     for col in ['Growth(%)']:
         if col in display_closed.columns:
             display_closed[col] = display_closed[col].apply(lambda x: safe_format(x, '{:.2f}%'))
-            
+    
     # Make dataframe Arrow-compatible
     display_closed = make_dataframe_arrow_compatible(display_closed)
     
@@ -368,11 +438,10 @@ with tab2:
 
 # Sidebar with overall metrics
 st.sidebar.header("Overall Portfolio Summary")
-st.sidebar.metric("Total Invested (All)", f"₹{metrics['total_invested_all']:,.2f}")
-st.sidebar.metric("Current Value (Open)", f"₹{metrics['total_current_open']:,.2f}")
-st.sidebar.metric("Total Sold (Closed)", f"₹{metrics['total_sold_closed']:,.2f}")
+st.sidebar.metric("Total Invested", f"₹{metrics['total_invested_all']:,.2f}")
 st.sidebar.metric("Net Profit/Loss", f"₹{metrics['total_pl_all']:,.2f}",
-                 delta=f"{((metrics['total_current_open'] + metrics['total_sold_closed'] - metrics['total_invested_all']) / metrics['total_invested_all'] * 100 if metrics['total_invested_all'] != 0 else 0):.2f}%")
+                 delta=f"{((metrics['total_pl_all']) / metrics['total_invested_all'] * 100 if metrics['total_invested_all'] != 0 else 0):.2f}%")
+st.sidebar.metric("Total Invested Days", f"{metrics['total_days_all']:,.0f}")
 
 # Add refresh button and last updated time
 if st.sidebar.button("🔄 Refresh Data"):
