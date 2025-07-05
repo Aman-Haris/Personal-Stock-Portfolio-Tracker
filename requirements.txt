@@ -1,7 +1,5 @@
 streamlit
-pandas
 plotly
+pandas
 gspread
 google-auth
-streamlit-marquee
-streamlit-extras
