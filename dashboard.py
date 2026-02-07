@@ -1,11 +1,9 @@
 import streamlit as st
 import pandas as pd
 import plotly.express as px
-import plotly.graph_objects as go
 import gspread
 from google.oauth2.service_account import Credentials
-from datetime import datetime
-import numpy as np
+from datetime import datetime, date
 
 # Set page config with modern theme
 st.set_page_config(
@@ -235,6 +233,22 @@ def load_data():
         return sample_open, sample_closed
 
 # Data processing
+def days_until_today(year, month, day):
+    """
+    Calculates the number of days between a specific date and today's date.
+    """
+    # Create a date object for the specific past date
+    x_date = date(year, month, day)
+
+    # Get today's date
+    today = date.today()
+
+    # Calculate the difference (returns a timedelta object)
+    delta = today - x_date
+
+    # Return the number of days
+    return delta.days
+
 def process_data(open_df, closed_df):
     # Convert dates and numeric columns
     date_cols = ['Buying Date', 'Selling Date']
@@ -256,7 +270,7 @@ def process_data(open_df, closed_df):
         'closed_invested': closed_df['Investment Amount'].sum(),
         'closed_pl': closed_df['Profit/Loss Booked'].sum() if 'Profit/Loss Booked' in closed_df.columns else 0,
         'possible_pl': closed_df['Possible Profit/Loss'].sum() if 'Possible Profit/Loss' in closed_df.columns else 0,
-        'total_days': open_df['Investment Days'].sum() + closed_df['Investment Days'].sum()
+        'total_days': days_until_today(2023, 12, 20)
     }
     
     return open_df, closed_df, metrics
